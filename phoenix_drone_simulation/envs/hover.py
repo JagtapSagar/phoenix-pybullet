@@ -55,6 +55,7 @@ class DroneHoverBaseEnv(DroneBaseEnv):
             init_rpy_dot=init_rpy_dot,
             physics=physics,
             observation_noise=observation_noise,
+            observation_history_size=2,
             domain_randomization=domain_randomization,
             sim_freq=sim_freq,
             aggregate_phy_steps=aggregate_phy_steps,
@@ -150,13 +151,15 @@ class DroneHoverBaseEnv(DroneBaseEnv):
                 # === 200 Hz Part ===
                 # This part is run with 200Hz, re-use Kalman Filter values:
                 xyz, quat, vel = self.state[0:3], self.state[3:7], self.state[7:10]
+                rpy = np.array(self.bc.getEulerFromQuaternion(quat))
                 # read Gyro data with 500 Hz and add noise:
                 omega = self.sensor_noise.add_noise_to_omega(
                     omega=self.drone.rpy_dot, dt=1/self.SIM_FREQ)
 
             # apply low-pass filtering to gyro
             omega = self.gyro_lpf.apply(omega)
-            obs = np.concatenate([xyz, quat, vel, omega])
+            txyz = xyz - self.target_pos
+            obs = np.concatenate([xyz, rpy, vel, omega, txyz])
         else:
             # no observation noise is applied
             obs = self.drone.get_state()
@@ -253,7 +256,7 @@ class DroneHoverBaseEnv(DroneBaseEnv):
 class DroneHoverSimpleEnv(DroneHoverBaseEnv):
     def __init__(self,
                  aggregate_phy_steps=1,
-                 control_mode='PWM',
+                 control_mode='AttitudeMod',
                  **kwargs):
         super(DroneHoverSimpleEnv, self).__init__(
             control_mode=control_mode,
@@ -269,7 +272,7 @@ class DroneHoverSimpleEnv(DroneHoverBaseEnv):
 class DroneHoverBulletEnv(DroneHoverBaseEnv):
     def __init__(self,
                  aggregate_phy_steps=2,  # sub-steps used to calculate motor dynamics
-                 control_mode='PWM',
+                 control_mode='AttitudeMod',
                  **kwargs):
         super(DroneHoverBulletEnv, self).__init__(
             aggregate_phy_steps=aggregate_phy_steps,

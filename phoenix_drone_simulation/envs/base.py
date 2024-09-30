@@ -343,7 +343,7 @@ class DroneBaseEnv(gym.Env, abc.ABC):
         """Implemented by child classes."""
         raise NotImplementedError
 
-    def render(self) -> Union[RenderFrame, list[RenderFrame], None]:
+    def render(self):# -> Union[RenderFrame, list[RenderFrame], None]:
         """Show PyBullet GUI visualization.
 
         Render function triggers the PyBullet GUI visualization.
@@ -382,9 +382,9 @@ class DroneBaseEnv(gym.Env, abc.ABC):
     def reset(
             self,
             *,
-            seed: Optional[int] = None,
-            options: Optional[dict[str, Any]] = None,
-    ) -> tuple[ObsType, dict[str, Any]]:
+            seed = None,
+            options= None,
+    ): # -> tuple[ObsType, dict[str, Any]]:
         """Reset environment to initial state.
 
         This function is called after agent encountered terminal state.
