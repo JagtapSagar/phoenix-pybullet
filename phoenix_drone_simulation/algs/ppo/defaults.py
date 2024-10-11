@@ -15,7 +15,9 @@ def defaults():
         adv_estimation_method='gae',
         epochs=1500,  # 3.2M steps
         gamma=0.99,
-        steps_per_epoch=32 * 1000
+        steps_per_epoch=32 * 1000,
+        pomdp='flicker',
+        pomdp_prob=0.0
     )
 
 

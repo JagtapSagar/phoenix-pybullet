@@ -23,7 +23,9 @@ from phoenix_drone_simulation.utils.mpi_tools import mpi_fork, mpi_print, is_roo
 
 def get_training_command_line_args(
         alg: Optional[str] = None,
-        env: Optional[str] = None
+        env: Optional[str] = None,
+        pomdp: Optional[str] = None,
+        pomdp_prob: Optional[float] = 0.0
 ) -> Tuple[argparse.Namespace, list]:
     r"""Fetches command line arguments from sys.argv.
 
@@ -68,6 +70,17 @@ def get_training_command_line_args(
         parser.add_argument(
             '--env', type=str, required=True,
             help='Example: HopperBulletEnv-v0')
+    
+    if (pomdp is not None) and (pomdp_prob is not None):
+        parser.add_argument('--pomdp', type=str, default=pomdp)
+        parser.add_argument('--pomdp_prob', type=str, default=pomdp_prob)
+    else:  # --add pomdp as required console argument
+        parser.add_argument(
+            '--pomdp', type=str, required=True,
+            help='Choose from: {flicker, random_noise, flickering_and_random_noise}')
+        parser.add_argument(
+            '--pomdp_prob', type=float, required=True,
+            help='Choose from between: [0,1]')
 
     parser.add_argument(
         '--no-mpi', action='store_true',
@@ -87,7 +100,7 @@ def get_training_command_line_args(
 
     user_name = getpass.getuser()
     parser.add_argument(
-        '--log-dir', type=str, default=os.path.join('/var/tmp/', user_name),
+        '--log-dir', type=str, default=os.path.join(os.getcwd(),'saves/'),
         help='Define a custom directory for logging.')
 
     _args, _unparsed_args = parser.parse_known_args()
@@ -139,7 +152,9 @@ def run_training(args, unparsed_args, exp_name=None):
         log_dir=args.log_dir,
         init_seed=args.seed,
         algorithm_kwargs=algorithm_kwargs,
-        use_mpi=not args.no_mpi
+        use_mpi=not args.no_mpi,
+        pomdp=args.pomdp,
+        pomdp_prob=args.pomdp_prob
     )
     model.compile(num_cores=args.cores, exp_name=exp_name)
 

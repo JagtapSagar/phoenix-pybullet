@@ -21,6 +21,8 @@ class Model(object):
                  init_seed: int,
                  algorithm_kwargs: dict = {},
                  use_mpi: bool = False,
+                 pomdp: str='flicker',
+                 pomdp_prob: float=0.0
                  ) -> None:
         """ Class Constructor  """
         self.alg = alg
@@ -38,6 +40,8 @@ class Model(object):
         self.kwargs = self.default_kwargs.copy()
         self.kwargs['seed'] = init_seed
         self.kwargs.update(**algorithm_kwargs)
+        self.kwargs['pomdp'] = pomdp
+        self.kwargs['pomdp_prob'] = pomdp_prob
         self.logger_kwargs = None  # defined by compile (a specific seed might be passed)
         self.env_alg_path = os.path.join(self.env_id, self.alg)
 

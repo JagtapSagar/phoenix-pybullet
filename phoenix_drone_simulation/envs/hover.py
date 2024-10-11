@@ -1,7 +1,7 @@
 import numpy as np
 from phoenix_drone_simulation.envs.base import DroneBaseEnv
 from phoenix_drone_simulation.envs.utils import deg2rad, rad2deg
-
+from phoenix_drone_simulation.utils.POMDP import POMDPWrapper
 
 class DroneHoverBaseEnv(DroneBaseEnv):
     def __init__(
@@ -20,6 +20,8 @@ class DroneHoverBaseEnv(DroneBaseEnv):
             penalty_spin: float = 1e-4,
             penalty_terminal: float = 100,
             penalty_velocity: float = 0,
+            pomdp: str = 'flicker',
+            pomdp_prob: float = 0.0,
             **kwargs
     ):
         # === Hover task specific attributes
@@ -45,6 +47,9 @@ class DroneHoverBaseEnv(DroneBaseEnv):
         init_rpy = np.zeros(3)
         init_xyz_dot = np.zeros(3)
         init_rpy_dot = np.zeros(3)
+
+        # Partial Observability
+        self.POMDP = POMDPWrapper(pomdp=pomdp, pomdp_prob=pomdp_prob)
 
         super(DroneHoverBaseEnv, self).__init__(
             control_mode=control_mode,
@@ -163,6 +168,9 @@ class DroneHoverBaseEnv(DroneBaseEnv):
         else:
             # no observation noise is applied
             obs = self.drone.get_state()
+
+        obs = self.POMDP.observation(obs)
+        
         return obs
 
     def compute_potential(self) -> float:
