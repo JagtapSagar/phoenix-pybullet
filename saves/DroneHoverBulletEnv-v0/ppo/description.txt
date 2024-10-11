@@ -1,0 +1,22 @@
+DefaultHover
+	- ppo
+	- no changes to observation vector
+Hover_obs2history (best)
+	- ppo
+	- observations: [xyz, rpy, vel_xyz, rpy_doy, target_dist, prev_action, action]
+	- observation history set to 2
+	- successful & stable hover with occasional crashes
+	- 1500 training epochs
+Hover_obs4history
+	- ppo
+	- observations: [xyz, rpy, vel_xyz, rpy_doy, target_dist, prev_action, action]
+	- observation history set to 2
+	- unsuccessful & unstable hover
+	- 300 training epochs
+Hover_obs2history_flicker0.15 (2nd best)
+	- ppo
+	- observations: [xyz, rpy, vel_xyz, rpy_doy, target_dist, prev_action, action]
+	- observation history set to 2
+	- successful & stable hover with occasional crashes
+	- 1500 training epochs
+
