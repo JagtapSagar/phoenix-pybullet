@@ -1,0 +1,24 @@
+<?xml version="1.0"?> 
+<robot name="simplecar">
+    <!-- Base Frame of Car --> 
+    <link name="base_link">
+        <inertial>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <mass value=".0"/>
+            <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
+        </inertial>
+
+        <visual> 
+            <geometry> 
+                <box size="0.1 0.1 0.01"/>
+            </geometry>
+        </visual> 
+
+        <collision>
+            <origin rpy="0 0 0" xyz="0 0 -5"/>
+            <geometry>
+                <box size="0.1 0.1 0.01"/>
+            </geometry>
+        </collision>
+    </link>
+</robot>

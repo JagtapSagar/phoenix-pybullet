@@ -48,3 +48,19 @@ register(
     entry_point='phoenix_drone_simulation.envs.circle:DroneCircleBulletEnv',
     max_episode_steps=500,
 )
+
+# ==================
+#   Lander Task
+# ==================
+
+register(
+    id='DroneLanderSimpleEnv-v0',
+    entry_point='phoenix_drone_simulation.envs.lander:DroneLanderSimpleEnv',
+    max_episode_steps=500
+)
+
+register(
+    id='DroneLanderBulletEnv-v0',
+    entry_point='phoenix_drone_simulation.envs.lander:DroneLanderBulletEnv',
+    max_episode_steps=500
+)
