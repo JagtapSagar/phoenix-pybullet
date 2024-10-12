@@ -1,6 +1,7 @@
 import numpy as np
 from phoenix_drone_simulation.envs.base import DroneBaseEnv
 from phoenix_drone_simulation.envs.utils import deg2rad
+from phoenix_drone_simulation.utils.POMDP import POMDPWrapper
 
 
 class DroneCircleBaseEnv(DroneBaseEnv):
@@ -20,6 +21,8 @@ class DroneCircleBaseEnv(DroneBaseEnv):
             penalty_spin: float = 1e-3,  # Note: 1e-4 resulted in fast yaw spin
             penalty_terminal: float = 100,
             penalty_velocity: float = 1e-4,
+            pomdp: str = 'flicker',
+            pomdp_prob: float = 0.0,
             **kwargs
     ):
         # === Circle task specific attributes
@@ -44,22 +47,27 @@ class DroneCircleBaseEnv(DroneBaseEnv):
 
         # === Reference trajectory
         self.episode_length = 500
-        self.circle_time = 3  # [s]
-        circle_radius = 0.25  # [m]
-        self.num_ref_points = N = self.circle_time * observation_frequency  # [1]
-        ts = 2 * np.pi * np.arange(self.num_ref_points) / self.num_ref_points
+        # self.circle_time = 3  # [s]
+        # circle_radius = 2  # [m]
+        # self.num_ref_points = self.circle_time * observation_frequency
+        # ts = 2 * np.pi * np.arange(self.num_ref_points) / self.num_ref_points
 
-        self.ref_offset = 0  # set by task_specific_reset()-method
-        self.ref = np.zeros((len(ts), 3))
-        self.ref[:, 2] = 1.  # z-position
-        self.ref[:, 1] = circle_radius * np.sin(ts)  # y-position
-        self.ref[:, 0] = circle_radius * (1 - np.cos(ts))  # x-position
+        # self.ref_offset = 0  # set by task_specific_reset()-method
+        # self.ref = np.zeros((len(ts), 3))
+        # self.ref[:, 2] = 1.  # z-position
+        # self.ref[:, 1] = circle_radius * np.sin(ts)  # y-position
+        # self.ref[:, 0] = circle_radius * (1 - np.cos(ts))  # x-position
+        self._setup_circle(observation_frequency)
 
         # task specific parameters - init drone state
         init_xyz = np.array([0, 0, 1], dtype=np.float32)
         init_rpy = np.zeros(3)
         init_xyz_dot = np.zeros(3)
         init_rpy_dot = np.zeros(3)
+
+        # Partial Observability
+        self.POMDP = POMDPWrapper(pomdp=pomdp, pomdp_prob=pomdp_prob)
+        self.move_target_clockwise = True # Updated in each reset
 
         super(DroneCircleBaseEnv, self).__init__(
             control_mode=control_mode,
@@ -76,6 +84,18 @@ class DroneCircleBaseEnv(DroneBaseEnv):
             observation_frequency=observation_frequency,
             **kwargs
         )
+    
+    def _setup_circle(self,observation_frequency):
+        self.circle_time = 3  # [s]
+        circle_radius = 2 + np.random.uniform(low=-1,high=1)  # [m]
+        self.num_ref_points = self.circle_time * observation_frequency
+        ts = 2 * np.pi * np.arange(self.num_ref_points) / self.num_ref_points
+
+        self.ref_offset = 0  # set by task_specific_reset()-method
+        self.ref = np.zeros((len(ts), 3))
+        self.ref[:, 2] = 1.  # z-position
+        self.ref[:, 1] = circle_radius * np.sin(ts)  # y-position
+        self.ref[:, 0] = circle_radius * (1 - np.cos(ts))  # x-position
 
     def _setup_task_specifics(self):
         """Initialize task specifics. Called by _setup_simulation()."""
@@ -93,17 +113,19 @@ class DroneCircleBaseEnv(DroneBaseEnv):
         )
 
         # === Draw reference circle
+        self.circle_illustration_points = []
         for k in range(0, self.num_ref_points, 10):
-            self.bc.createMultiBody(
-                baseMass=0,
-                baseCollisionShapeIndex=-1,
-                baseVisualShapeIndex=self.bc.createVisualShape(
-                    self.bc.GEOM_SPHERE,
-                    radius=0.003,
-                    rgbaColor=[0.95, 0.15, 0.10, 0.7],
-                ),
-                basePosition=self.ref[k]
-            )
+            point = self.bc.createMultiBody(
+                    baseMass=0,
+                    baseCollisionShapeIndex=-1,
+                    baseVisualShapeIndex=self.bc.createVisualShape(
+                        self.bc.GEOM_SPHERE,
+                        radius=0.003,
+                        rgbaColor=[0.95, 0.15, 0.10, 0.7],
+                    ),
+                    basePosition=self.ref[k]
+                )
+            self.circle_illustration_points.append(point)
 
         # === Set camera position
         self.bc.resetDebugVisualizerCamera(
@@ -127,8 +149,13 @@ class DroneCircleBaseEnv(DroneBaseEnv):
 
     def compute_observation(self) -> np.ndarray:
         r"""Returns the current observation of the environment."""
-        t = (self.iteration // self.aggregate_phy_steps + self.ref_offset) % self.num_ref_points
+        # Move reference in selected direction
+        if self.move_target_clockwise:
+            t = (self.iteration // self.aggregate_phy_steps + self.ref_offset) % self.num_ref_points
+        else:
+            t = (-(self.iteration // self.aggregate_phy_steps) + self.ref_offset) % self.num_ref_points
         self.target_pos = self.ref[t]
+
         # update target visual:
         self.bc.resetBasePositionAndOrientation(
             self.target_body_id,
@@ -167,13 +194,16 @@ class DroneCircleBaseEnv(DroneBaseEnv):
             # apply low-pass filtering to gyro
             omega = self.gyro_lpf.apply(omega)
             obs = np.concatenate(
-                [xyz, quat, vel, omega, error_to_ref])
+                [quat, vel, omega, error_to_ref])
         else:
             # no observation noise is applied
             error_to_ref = self.target_pos - self.drone.xyz
-            obs = np.concatenate([self.drone.xyz, self.drone.quaternion,
+            obs = np.concatenate([self.drone.quaternion,
                                   self.drone.xyz_dot, self.drone.rpy_dot,
                                   error_to_ref])
+        
+        obs = self.POMDP.observation(obs)
+
         return obs
 
     def compute_potential(self) -> float:
@@ -219,6 +249,10 @@ class DroneCircleBaseEnv(DroneBaseEnv):
         xyz_dot = self.init_xyz_dot.copy()
         rpy_dot = self.init_rpy_dot.copy()
         quat = self.init_quaternion.copy()
+
+        # Set target movement direction
+        self.move_target_clockwise = True if np.random.normal(0,1)>=0 else False
+        self._setup_circle(self.observation_frequency)
 
         if self.enable_reset_distribution:
             # compute index where to position drone on reference circle:
@@ -276,6 +310,16 @@ class DroneCircleBaseEnv(DroneBaseEnv):
             ornObj=(0, 0, 0, 1)
         )
 
+        # === Draw reference circle
+        point_ids = [k for k in range(0, self.num_ref_points, 10)]
+        assert (len(point_ids)==len(self.circle_illustration_points)), 'Lengths must match'
+        for visual_point,k_idx in zip(self.circle_illustration_points,point_ids):
+            self.bc.resetBasePositionAndOrientation(
+                visual_point,
+                posObj=self.ref[k_idx],
+                ornObj=(0, 0, 0, 1)
+            )
+
 
 """ ==================
         PWM control
@@ -286,7 +330,7 @@ class DroneCircleBaseEnv(DroneBaseEnv):
 class DroneCircleSimpleEnv(DroneCircleBaseEnv):
     def __init__(self,
                  aggregate_phy_steps: int = 1,
-                 control_mode='PWM',
+                 control_mode='AttitudeMod',
                  **kwargs):
         super(DroneCircleSimpleEnv, self).__init__(
             control_mode=control_mode,
@@ -302,7 +346,7 @@ class DroneCircleSimpleEnv(DroneCircleBaseEnv):
 class DroneCircleBulletEnv(DroneCircleBaseEnv):
     def __init__(self,
                  aggregate_phy_steps: int = 2,  # sub-steps used to calculate motor dynamics
-                 control_mode: str = 'PWM',
+                 control_mode: str = 'AttitudeMod',
                  **kwargs):
         super(DroneCircleBulletEnv, self).__init__(
             aggregate_phy_steps=aggregate_phy_steps,
