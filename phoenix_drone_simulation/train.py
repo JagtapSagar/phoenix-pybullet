@@ -25,7 +25,9 @@ def get_training_command_line_args(
         alg: Optional[str] = None,
         env: Optional[str] = None,
         pomdp: Optional[str] = None,
-        pomdp_prob: Optional[float] = 0.0
+        pomdp_prob: Optional[float] = 0.0,
+        observation_noise: Optional[float] = 1.0,
+        domain_randomization: Optional[float] = 0.1,
 ) -> Tuple[argparse.Namespace, list]:
     r"""Fetches command line arguments from sys.argv.
 
@@ -81,7 +83,22 @@ def get_training_command_line_args(
         parser.add_argument(
             '--pomdp_prob', type=float, required=True,
             help='Choose from between: [0,1]')
+    
+    ######################## observation_noise ##########################
+    # Currently only used to enable sensor noise
+    # Preferably should add arguments to vary the noise parameters
+    # Idea_1: Add a percentage to vary existing noise parameters.
+    #         e.g., 1 varies between 0.9 and 1.1 if cli vale set to 0.1
+    # Idea_2: Add individual noise parameters, commanilize gaussian and uniform noise parameters
+    #  
+    parser.add_argument(
+        '--observation_noise', type=float, required=False, default=observation_noise,
+        help='Input observation noise.')
+    ##################################################################
 
+    parser.add_argument(
+        '--domain_randomization', type=float, required=False, default=domain_randomization,
+        help='Domain_randomization [0.0,1.0].')
     parser.add_argument(
         '--no-mpi', action='store_true',
         help='Do not use MPI for parallel execution.')
@@ -154,7 +171,9 @@ def run_training(args, unparsed_args, exp_name=None):
         algorithm_kwargs=algorithm_kwargs,
         use_mpi=not args.no_mpi,
         pomdp=args.pomdp,
-        pomdp_prob=args.pomdp_prob
+        pomdp_prob=args.pomdp_prob,
+        observation_noise=args.observation_noise,
+        domain_randomization=args.domain_randomization
     )
     model.compile(num_cores=args.cores, exp_name=exp_name)
 

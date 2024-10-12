@@ -22,7 +22,9 @@ class Model(object):
                  algorithm_kwargs: dict = {},
                  use_mpi: bool = False,
                  pomdp: str='flicker',
-                 pomdp_prob: float=0.0
+                 pomdp_prob: float=0.0,
+                 observation_noise: float=1.0,
+                 domain_randomization: float=0.1,
                  ) -> None:
         """ Class Constructor  """
         self.alg = alg
@@ -42,6 +44,8 @@ class Model(object):
         self.kwargs.update(**algorithm_kwargs)
         self.kwargs['pomdp'] = pomdp
         self.kwargs['pomdp_prob'] = pomdp_prob
+        self.kwargs['observation_noise'] = observation_noise
+        self.kwargs['domain_randomization'] = domain_randomization
         self.logger_kwargs = None  # defined by compile (a specific seed might be passed)
         self.env_alg_path = os.path.join(self.env_id, self.alg)
 
