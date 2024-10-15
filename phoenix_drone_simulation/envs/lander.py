@@ -1,7 +1,8 @@
 import numpy as np
 from phoenix_drone_simulation.envs.base import DroneBaseEnv
 from phoenix_drone_simulation.envs.utils import deg2rad
-
+from phoenix_drone_simulation.utils.POMDP import POMDPWrapper
+from phoenix_drone_simulation.utils.trajectories import random_trajectory_generator
 
 class DroneLanderBaseEnv(DroneBaseEnv):
     def __init__(
@@ -20,6 +21,8 @@ class DroneLanderBaseEnv(DroneBaseEnv):
             penalty_spin: float = 1e-3,  # Note: 1e-4 resulted in fast yaw spin
             penalty_terminal: float = 100,
             penalty_velocity: float = 1e-4,
+            pomdp: str = 'flicker',
+            pomdp_prob: float = 0.0,
             **kwargs
     ):
         # === Circle task specific attributes
@@ -46,21 +49,20 @@ class DroneLanderBaseEnv(DroneBaseEnv):
         # === Reference trajectory
         self.episode_length = 500
         self.circle_time = 3  # [s]
-        circle_radius = 0.25  # [m]
-        self.num_ref_points = N = self.circle_time * observation_frequency  # [1]
-        ts = 2 * np.pi * np.arange(self.num_ref_points) / self.num_ref_points
+        self.num_ref_points = self.circle_time * observation_frequency
 
         self.ref_offset = 0  # set by task_specific_reset()-method
-        self.ref = np.zeros((len(ts), 3))
-        self.ref[:, 2] = 0.4  # z-position
-        self.ref[:, 1] = circle_radius * np.sin(ts)  # y-position
-        self.ref[:, 0] = circle_radius * (1 - np.cos(ts))  # x-position
+        self._setup_trajectory(observation_frequency=observation_frequency)
 
         # task specific parameters - init drone state
         init_xyz = np.array([0, 0, 1], dtype=np.float32)
         init_rpy = np.zeros(3)
         init_xyz_dot = np.zeros(3)
         init_rpy_dot = np.zeros(3)
+
+        # Partial Observability
+        self.POMDP = POMDPWrapper(pomdp=pomdp, pomdp_prob=pomdp_prob)
+        self.move_target_clockwise = True # Updated in each reset
 
         super(DroneLanderBaseEnv, self).__init__(
             control_mode=control_mode,
@@ -85,33 +87,27 @@ class DroneLanderBaseEnv(DroneBaseEnv):
             radius=0.02,
             rgbaColor=[0.95, 0.1, 0.05, 0.4],
         )
-        # Spawn visual without collision shape
-        self.target_body_id = self.bc.createMultiBody(
-            baseMass=0,
-            baseCollisionShapeIndex=-1,
-            baseVisualShapeIndex=target_visual,
-            basePosition=self.target_pos
-        )
+
         self.time_count = 0
-        inch_to_meters = 0.0254
-        platform_dim = [0.12, 0.12, 0.005] #[0.359, 0.425, 0.005] #[0.3,0.4,0.005]
+        platform_dim = [0.12, 0.12, 0.005] # Collision debugging values [0.9, 0.9, 0.005] 
         cuid = self.bc.createCollisionShape(self.bc.GEOM_BOX, halfExtents = platform_dim)
         mass= 0 #static box
         self.landing_pad_id = self.bc.createMultiBody(mass,cuid)
-        # self.landing_pad_id = self.bc.loadURDF("phoenix_drone_simulation/envs/assets/landing_pad.urdf")
 
         # === Draw reference circle
+        self.circle_illustration_points = []
         for k in range(0, self.num_ref_points, 10):
-            self.bc.createMultiBody(
-                baseMass=0,
-                baseCollisionShapeIndex=-1,
-                baseVisualShapeIndex=self.bc.createVisualShape(
-                    self.bc.GEOM_SPHERE,
-                    radius=0.003,
-                    rgbaColor=[0.95, 0.15, 0.10, 0.7],
-                ),
-                basePosition=self.ref[k]
-            )
+            point = self.bc.createMultiBody(
+                    baseMass=0,
+                    baseCollisionShapeIndex=-1,
+                    baseVisualShapeIndex=self.bc.createVisualShape(
+                        self.bc.GEOM_SPHERE,
+                        radius=0.003,
+                        rgbaColor=[0.95, 0.15, 0.10, 0.7],
+                    ),
+                    basePosition=self.ref[k]
+                )
+            self.circle_illustration_points.append(point)
 
         # === Set camera position
         self.bc.resetDebugVisualizerCamera(
@@ -124,8 +120,15 @@ class DroneLanderBaseEnv(DroneBaseEnv):
     def compute_done(self) -> bool:
         """Compute end of episode if dist(drone - ref) > d."""
         dist = np.linalg.norm(self.drone.xyz - self.target_pos)
-        done = True if ((dist > self.done_dist_threshold) or (self.drone.xyz[2] < self.done_elevation_threshold)) else False
-        return done
+        orientation_within_threshold = all(np.abs(self.drone.rpy[0:2]) < deg2rad(1))
+        contact_points = self.bc.getContactPoints(self.landing_pad_id,self.drone.body_unique_id)
+
+        # Success criteria
+        success = contact_points and orientation_within_threshold
+        # Fail criteria
+        fail    = (dist > self.done_dist_threshold) or (self.drone.xyz[2] < self.done_elevation_threshold)
+
+        return success or fail
 
     def compute_info(self) -> dict:
         # state = self.drone.get_state()
@@ -139,16 +142,14 @@ class DroneLanderBaseEnv(DroneBaseEnv):
 
     def compute_observation(self) -> np.ndarray:
         r"""Returns the current observation of the environment."""
-        t = (self.iteration // self.aggregate_phy_steps + self.ref_offset) % self.num_ref_points
+        # Move reference in selected direction
+        if self.move_target_clockwise:
+            t = (self.iteration // self.aggregate_phy_steps + self.ref_offset) % self.num_ref_points
+        else:
+            t = (-(self.iteration // self.aggregate_phy_steps) + self.ref_offset) % self.num_ref_points
+        
         self.target_pos = self.ref[t]
         self.target_pos[2] += self.sign_wave_generator()
-
-        # For debugging platform positions
-        # self.bc.resetBasePositionAndOrientation(
-        #     self.drone.body_unique_id,
-        #     posObj=[0,0,1],
-        #     ornObj=(0, 0, 0, 1)
-        # )
         
         self.bc.resetBasePositionAndOrientation(
             self.landing_pad_id,
@@ -194,6 +195,9 @@ class DroneLanderBaseEnv(DroneBaseEnv):
             obs = np.concatenate([self.drone.quaternion,
                                   self.drone.xyz_dot, self.drone.rpy_dot,
                                   error_to_ref])
+        
+        obs = self.POMDP.observation(obs)
+
         return obs
 
     def compute_potential(self) -> float:
@@ -229,6 +233,13 @@ class DroneLanderBaseEnv(DroneBaseEnv):
         t = (self.iteration // self.aggregate_phy_steps + self.ref_offset) % self.num_ref_points
         reference[:3] = self.ref[t:(t+horizon)].T
         return reference
+    
+    def _setup_trajectory(self,observation_frequency):
+        """Returns a randomly selected trajectory"""
+        
+        ts = 2 * np.pi * np.arange(self.num_ref_points) / self.num_ref_points
+        self.ref = random_trajectory_generator(num_points=len(ts))
+        self.ref[:, 2] = 0.4  # z-position
 
     def task_specific_reset(self):
 
@@ -240,6 +251,11 @@ class DroneLanderBaseEnv(DroneBaseEnv):
         rpy_dot = self.init_rpy_dot.copy()
         quat = self.init_quaternion.copy()
 
+        # Randomly generate new trjectory 
+        self._setup_trajectory(observation_frequency=self.observation_frequency)
+        # Set target movement direction
+        self.move_target_clockwise = True if np.random.normal(0,1)>=0 else False
+
         if self.enable_reset_distribution:
             # compute index where to position drone on reference circle:
             self.ref_offset = np.random.randint(0, self.num_ref_points)
@@ -248,7 +264,8 @@ class DroneLanderBaseEnv(DroneBaseEnv):
 
             pos_lim = 0.5  # should be at least 0.15 for hover task since position PID shoots up to (0,0,1.15)
             pos += np.random.uniform(-pos_lim, pos_lim, size=3)
-            pos[2] += 1.5
+            # TODO: Uncomment this pos[2] += 1.5
+            pos[2] = 0.45
 
             init_angle = deg2rad(20)  # default: 20°
             rpy = np.random.uniform(-init_angle, init_angle, size=3)
@@ -291,17 +308,21 @@ class DroneLanderBaseEnv(DroneBaseEnv):
             angularVelocity=R.T @ rpy_dot
         )
 
-        # self.bc.resetBasePositionAndOrientation(
-        #     self.target_body_id,
-        #     posObj=self.target_pos,
-        #     ornObj=(0, 0, 0, 1)
-        # )
-
         self.bc.resetBasePositionAndOrientation(
             self.landing_pad_id,
             posObj=self.target_pos,
             ornObj=(0, 0, 0, 1)
         )
+
+        # === Draw reference circle
+        point_ids = [k for k in range(0, self.num_ref_points, 10)]
+        assert (len(point_ids)==len(self.circle_illustration_points)), 'Lengths must match'
+        for visual_point,k_idx in zip(self.circle_illustration_points,point_ids):
+            self.bc.resetBasePositionAndOrientation(
+                visual_point,
+                posObj=self.ref[k_idx],
+                ornObj=(0, 0, 0, 1)
+            )
 
 
 """ ==================
@@ -313,7 +334,7 @@ class DroneLanderBaseEnv(DroneBaseEnv):
 class DroneLanderSimpleEnv(DroneLanderBaseEnv):
     def __init__(self,
                  aggregate_phy_steps: int = 1,
-                 control_mode='PWM',
+                 control_mode='AttitudeMod',
                  **kwargs):
         super(DroneLanderSimpleEnv, self).__init__(
             control_mode=control_mode,
@@ -329,7 +350,7 @@ class DroneLanderSimpleEnv(DroneLanderBaseEnv):
 class DroneLanderBulletEnv(DroneLanderBaseEnv):
     def __init__(self,
                  aggregate_phy_steps: int = 2,  # sub-steps used to calculate motor dynamics
-                 control_mode: str = 'PWM',
+                 control_mode: str = 'AttitudeMod',
                  **kwargs):
         super(DroneLanderBulletEnv, self).__init__(
             aggregate_phy_steps=aggregate_phy_steps,

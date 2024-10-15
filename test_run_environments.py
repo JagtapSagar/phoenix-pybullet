@@ -5,6 +5,7 @@ import numpy as np
 from phoenix_drone_simulation.utils.POMDP import POMDPWrapper
 
 # env = gym.make('DroneHoverBulletEnv-v0', render_mode="human")
+# env = gym.make('DroneCircleBulletEnv-v0', render_mode="human")
 env = gym.make('DroneLanderBulletEnv-v0', render_mode="human")
 POMDP = POMDPWrapper('flicker',0.15)
 
