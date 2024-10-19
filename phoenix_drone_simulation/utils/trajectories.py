@@ -3,10 +3,10 @@ import torch
 import random
 import numpy as np
 
-def random_trajectory_generator(num_points:int = 100):
+def random_trajectory_generator(num_points:int = 100, limits: float = 0):
     choices = [lemniscate, circle] #, square]
     choice = random.choice(choices)
-    return  np.hstack((choice(num_points=num_points), np.zeros((num_points,1))))
+    return  np.hstack((choice(num_points=num_points,limits=limits), np.zeros((num_points,1))))
 
 def lemniscate(a: float = math.sqrt(2), num_points: int = 200, limits: float = 0.5):
     # Parameters for the lemniscate curve

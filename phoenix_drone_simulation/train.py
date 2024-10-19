@@ -78,10 +78,10 @@ def get_training_command_line_args(
         parser.add_argument('--pomdp_prob', type=str, default=pomdp_prob)
     else:  # --add pomdp as required console argument
         parser.add_argument(
-            '--pomdp', type=str, required=True,
+            '--pomdp', type=str, required=False,
             help='Choose from: {flicker, random_noise, flickering_and_random_noise}')
         parser.add_argument(
-            '--pomdp_prob', type=float, required=True,
+            '--pomdp_prob', type=float, required=False,
             help='Choose from between: [0,1]')
     
     ######################## observation_noise ##########################

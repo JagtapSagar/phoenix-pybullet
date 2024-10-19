@@ -17,6 +17,8 @@ class POMDPWrapper():
         elif self.pomdp == "flickering_and_random_noise":
             self.flicker_prob = 0.1
             self.prob = pomdp_prob
+        elif self.pomdp == 'none':
+            self.prob = 0.0
         else:
             raise ValueError("pomdp was not in ['remove_velocity', 'flickering', 'random_noise', 'random_sensor_missing']!")
 
@@ -39,6 +41,8 @@ class POMDPWrapper():
             noise = torch.FloatTensor(*obs.shape).uniform_(*self.range)
             # Add random noise
             return (new_obs * noise).numpy()
+        elif self.pomdp == 'none':
+            return obs
         else:
-            raise ValueError("POMDP was not in ['flicker_random', 'flicker_duration', 'flicker_freq', 'random_noise']!")
+            raise ValueError("POMDP was not in ['flicker_random', 'flicker_duration', 'flicker_freq', 'random_noise','none']!")
 
