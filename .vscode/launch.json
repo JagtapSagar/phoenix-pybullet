@@ -1,0 +1,31 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Train debugger",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "phoenix_drone_simulation/train.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "--alg", "ppo", "--env", "DroneCircleBulletEnv-v0", "--cores", "1", "--debug",
+                "--pomdp", "flicker", "--pomdp_prob", "0.15", "--observation_noise", "0.55", "--domain_randomization", "0.5"
+            ]
+        },
+        {
+            "name": "Play debugger",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "phoenix_drone_simulation/play.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "--ckpt", "${command:pickArgs}"
+            ]
+        }
+    ]
+}
